@@ -15,7 +15,7 @@ Vagrant.configure("2") do |config|
   # VM2 configuration (normal machine)
   config.vm.define "normal" do |normal|
     normal.vm.hostname = "normal"
-    nromal.vm.provision "shell", path: "scripts/normal.sh"
+    normal.vm.provision "shell", path: "scripts/normal.sh"
     normal.vm.provider :virtualbox do |vb| vb.name = "normal" end
     normal.vm.network "private_network", ip: "192.168.60.101"
   end
