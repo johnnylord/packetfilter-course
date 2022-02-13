@@ -1,3 +1,9 @@
 .vagrant
+*.o
 *.ko
 *.ll
+*.cmd
+*.order
+*.symvers
+*.mod
+*.mod.*

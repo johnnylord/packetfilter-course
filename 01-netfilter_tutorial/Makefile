@@ -1,4 +1,5 @@
 obj-m += netfilter.o
+obj-m += netfilter-sysfs.o
 
 
 all:

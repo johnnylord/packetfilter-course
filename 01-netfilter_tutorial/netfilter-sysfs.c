@@ -6,7 +6,28 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 
+#include <linux/fs.h>
+#include <linux/sysfs.h>
+#include <linux/string.h>
+#include <linux/kobject.h>
+
 #define MODULE_NAME "netfilter"
+
+static struct kobject *mymodule;
+static unsigned int mystate = 1;
+
+static ssize_t mystate_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", mystate);
+}
+
+static ssize_t mystate_store(struct kobject *kobj, struct kobj_attribute *attr, char *buf, size_t count)
+{
+	sscanf(buf, "%u", &mystate);
+	return count;
+}
+
+static struct kobj_attribute mystate_attr = __ATTR(mystate, 0660, mystate_show, (void*)mystate_store);
 
 /*
  * Reference:
@@ -38,7 +59,7 @@ hfuncIN(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
     if (iphdr->protocol == IPPROTO_TCP) {
         tcphdr = tcp_hdr(skb);
         port = ntohs(tcphdr->dest);
-        if (port == 80) {
+        if (port == 80 && mystate) {
             action = NF_DROP;
             pr_info("%s: Drop packet from %s going to port %u\n",
 					MODULE_NAME, ndIn->name, port);
@@ -50,10 +71,12 @@ hfuncIN(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 
 static int __init mymodule_init(void)
 {
+	int error = 0;
+
     /* Allocate space for netfilter hook initialization */
     nfhoIN = (struct nf_hook_ops*)kcalloc(1, sizeof(struct nf_hook_ops), GFP_KERNEL);
     if (nfhoIN == NULL) {
-        goto fail;
+        goto nf_hook_fail;
     }
 
     /*
@@ -70,17 +93,39 @@ static int __init mymodule_init(void)
 
     /* Register the netfilter hook on specific network namespace */
     nf_register_net_hook(&init_net, nfhoIN);
+
+	/* Create kobject representing the state of the module */
+	mymodule = kobject_create_and_add(MODULE_NAME, kernel_kobj);
+	if (!mymodule) {
+		goto sys_add_fail;
+	}
+
+	/* Export module state under sysfs */
+	error = sysfs_create_file(mymodule, &mystate_attr.attr);
+	if (error) {
+		goto sys_add_fail;
+	}
+
+	pr_info("%s: sysfs node create under /sys/kernel/%s\n",
+			MODULE_NAME, MODULE_NAME);
     return 0;
 
-fail:
+nf_hook_fail:
     return -1;
+
+sys_add_fail:
+    nf_unregister_net_hook(&init_net, nfhoIN);
+    kfree(nfhoIN);
+	return -ENOMEM;
 }
 
 static void __exit mymodule_exit(void)
 {
+	kobject_put(mymodule);
     nf_unregister_net_hook(&init_net, nfhoIN);
     kfree(nfhoIN);
 }
 
 module_init(mymodule_init);
 module_exit(mymodule_exit);
+MODULE_LICENSE("GPL");
